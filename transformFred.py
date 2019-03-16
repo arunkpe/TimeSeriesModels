@@ -8,6 +8,7 @@ class getFredData:
     def __init__(self):
         """
         Initialize the getFredData class
+        This has default methods to download data from Fred & Zillow
         """
 
     def sanitize(self,inputString):
