@@ -1,4 +1,5 @@
 import pandas as pd
+import os
 from fredapi import Fred
 fred = Fred(api_key='30239c301afe55694c8d903e5856b061')
 
@@ -6,6 +7,7 @@ fred = Fred(api_key='30239c301afe55694c8d903e5856b061')
 class getFredData:
 
     def __init__(self):
+        self.BASE_DIR = os.path.dirname(__file__)
         """
         Initialize the getFredData class
         This has default methods to download data from Fred & Zillow
@@ -31,7 +33,7 @@ class getFredData:
         return standardizedString
 
     def available_codes(self):
-        codeLookup = pd.read_excel('FREDCode.xlsx')
+        codeLookup = pd.read_excel(os.path.join(self.BASE_DIR, 'FREDCode.xlsx'))
         return codeLookup
 
     def fetch_data(self,macroVarInput):
