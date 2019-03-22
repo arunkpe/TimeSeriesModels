@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.api import VAR
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 import statsmodels.api as smodels
 from sklearn.externals import joblib
 
@@ -112,50 +113,6 @@ var_model_list = list_vars
 varModelDF = df_wide[var_model_list]
 varModelDF.dropna(inplace=True)
 
-model = VAR(varModelDF)
-results = model.fit(2)
-results.plot()
-results.plot_acorr()
-
-plt.show()
-
-results.summary()
-
-startDate_train = datetime.strptime('1981-07-01', '%Y-%m-%d')
-endDate_train = datetime.strptime('2012-07-01', '%Y-%m-%d')
-
-dates_list = varModelDF.index
-
-train_dates = [date for date in dates_list if (date >= startDate_train) & (date <= endDate_train)]
-test_dates = list(set(dates_list) - set(train_dates))
-
-train_varModelDF = varModelDF.loc[train_dates]
-test_varModelDF = varModelDF.loc[test_dates]
-
-#Run Model on test-train
-var_model_list = list_vars
-#var_model_list.append('UE')
-varModelDF = df_wide[var_model_list]
-varModelDF.dropna(inplace=True)
-
-model = VAR(train_varModelDF)
-results = model.fit(ic='bic',lag =4)
-results.plot()
-results.plot_acorr()
-
-plt.show()
-
-results.summary()
-
-# save the model to disk
-filename = '/Users/vibhor/Desktop/Models/lag4model.sav'
-joblib.dump(model, filename)
-
-# load the model from disk
-#loaded_model = joblib.load(filename)
-#result = loaded_model.score(X_test, Y_test)
-#print(result)
-
 def tsplot(y, x, lags=None, figsize=(10, 8)):
     fig = plt.figure(figsize=figsize)
     layout = (2, 2)
@@ -175,3 +132,74 @@ def tsplot(y, x, lags=None, figsize=(10, 8)):
 for var in list_vars:
     tsplot(varModelDF[var],var)
 
+
+#tes-train split etc.
+startDate_train = datetime.strptime('1981-07-01', '%Y-%m-%d')
+endDate_train = datetime.strptime('2012-07-01', '%Y-%m-%d')
+
+dates_list = varModelDF.index
+
+train_dates = [date for date in dates_list if (date >= startDate_train) & (date <= endDate_train)]
+test_dates = list(set(dates_list) - set(train_dates))
+
+
+train_varModelDF = varModelDF.loc[train_dates]
+test_varModelDF = varModelDF.loc[test_dates]
+
+#Run Model on test-train
+var_model_list = list_vars
+#var_model_list.append('UE')
+varModelDF = df_wide[var_model_list]
+varModelDF.dropna(inplace=True)
+
+model = VAR(train_varModelDF)
+results = model.fit(ic='bic',maxlags =4)
+results.plot()
+results.plot_acorr()
+
+plt.show()
+
+results.summary()
+
+# save the model to disk
+#filename = '/Users/vibhor/Desktop/Models/lag4model.sav'
+#joblib.dump(model, filename)
+
+# load the model from disk
+#loaded_model = joblib.load(filename)
+#result = loaded_model.score(X_test, Y_test)
+#print(result)
+
+#test performance
+startDt = test_dates[0]
+endDt = test_dates[-1]
+results.predict(train_varModelDF,startDate,endDt)
+
+lag_order = results.k_ar
+results.forecast(test_varModelDF.values[-lag_order:], 5)
+
+
+
+################
+dict_varmodels = dict()
+var_model_list = list_vars
+
+last_forecast_date = datetime.strptime('2018-01-01', '%Y-%m-%d')
+model_build_date = datetime.strptime('2012-07-01', '%Y-%m-%d')
+
+while (model_build_date <= last_forecast_date):
+    train_dates = [date for date in dates_list if (date < model_build_date)]
+    train_data = varModelDF.loc[train_dates]
+    # Run Model on test-train
+    varModelDF = df_wide[var_model_list]
+    varModelDF.dropna(inplace=True)
+
+    model = VAR(train_varModelDF)
+    results = model.fit(ic='bic', maxlags=4)
+
+    for fcst_period in range(1,4):
+
+    forecast = results.predict(train_varModelDF, startDate, endDt)
+
+    dict_varmodels[model_build_date] = {'model':model,'results':results, 'adf_stats':adf_stats}
+    model_build_date = model_build_date + relativedelta(months=3)
