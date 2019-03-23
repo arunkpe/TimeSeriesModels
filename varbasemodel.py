@@ -1,3 +1,8 @@
+"""
+This program creates and tests Vector AutoRegressive models on HPI, GDP, 30Yr Mortgage rates and Unemployment rate
+Data starts from Jan-1981.
+"""
+#Import all the required libraries
 from TimeSeriesModels.transformFred import getFredData
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -13,7 +18,7 @@ from sklearn.externals import joblib
 
 
 #Initiate Fred Object
-FredData = getFredData()
+FredData = getFredData() #this is a class defined in transformFred.py
 
 
 ac = FredData.available_codes().reset_index().set_index('Code')
