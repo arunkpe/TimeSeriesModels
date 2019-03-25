@@ -27,18 +27,22 @@ print(ac.loc['CPI'])#printing sample variable location
 
 dict_macrovars = dict()
 
-list_macrovars = ['HPI', 'GDP', 'MORTGAGE30US', 'UE']
+list_macrovars = ['HPI', 'GDP', 'MORTGAGE30US', 'UE'] #names of macroeconomic variables (MEVs)
 startDate = '1981-01-01'
 endDate   = '2018-12-31'
+
+#This for loop imports MEVs into macro_df dataframe and bounds them between the dates above
+#Stationarity tests (kpss and adf) are run on MEVs and MEV data and test stats are stored in dict_macrovars dictionary
 for var in list_macrovars:
     macro_df = FredData.fetch_data(var)
     macro_df =  macro_df[(macro_df.Date >= startDate) & (macro_df.Date<=endDate)]
-    macro_df = macro_df.set_index('Date')
+    macro_df = macro_df.set_index('Date') #Date column now becomes the index
     kpss_stats = kpss(macro_df.iloc[:,0])
     adf_stats = adfuller(macro_df.iloc[:,0])
 
     dict_macrovars[var] = {'df':macro_df,'kpss_stats':kpss_stats, 'adf_stats':adf_stats}
 
+#The below loop plots the MEV data
 fig, ax = plt.subplots(nrows=int(len(list_macrovars)/2), ncols=int(len(list_macrovars)/2))
 for row_index,row in enumerate(ax):
     for col_index,col in enumerate(row):
@@ -47,6 +51,7 @@ for row_index,row in enumerate(ax):
 
 plt.show()
 
+#The below loop informs which MEV is stationary
 for var in list_macrovars:
     significance_threshold_kpss = dict_macrovars[var]['kpss_stats'][3]['1%']
     significance_threshold_adf  = dict_macrovars[var]['adf_stats'][4]['1%']
@@ -62,7 +67,7 @@ for var in list_macrovars:
 
     print("Var:",var,"KPSS Stationarity",kpss_stationarity,"ADF Stationarity",adf_stationarity,pval_kpss,pval_adf)
 
-
+#The below loop transforms the MEV that is non-stationary (UE is the exception)...
 for var in list_macrovars:
     if var in ('HPI','GDP'):
         dict_macrovars[f'{var}_logDiff'] = {'df':np.log(dict_macrovars[var]['df']).diff().dropna()}
@@ -71,13 +76,14 @@ for var in list_macrovars:
     else:
         pass
 
+#...and this one runs the stationarity tests on the new transformed variables, dict_macrovars gets bigger
 list_vars = ['HPI_logDiff', 'GDP_logDiff', 'MORTGAGE30US_Diff','UE_Diff']
 for var in list_vars:
     kpss_stats = kpss(dict_macrovars[var]['df'].iloc[:,0])
     adf_stats = adfuller(dict_macrovars[var]['df'].iloc[:,0])
     dict_macrovars[var] = {'df': dict_macrovars[var]['df'], 'kpss_stats':kpss_stats, 'adf_stats':adf_stats}
 
-
+#Transformed variables' stationaroty status is displayed
 for var in list_vars:
     significance_threshold_kpss = dict_macrovars[var]['kpss_stats'][3]['1%']
     significance_threshold_adf  = dict_macrovars[var]['adf_stats'][4]['1%']
