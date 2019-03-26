@@ -99,31 +99,34 @@ for var in list_vars:
 
     print("Var:",var,"KPSS Stationarity",kpss_stationarity,"ADF Stationarity",adf_stationarity,pval_kpss,pval_adf)
 
-df_all = pd.DataFrame(columns=['MEV_Type', 'Value'], index=['Date'])
+df_all = pd.DataFrame(columns=['MEV_Type', 'Value'], index=['Date'])#dataframe of MEVs is now constructed
 df_all.dropna(inplace=True)
 
+#This for loop populates the dataframe from the dictionary dict_macrovars
 for mev_name, mev_dict in dict_macrovars.items():
     df = mev_dict['df'].copy()
     df['MEV_Type'] = mev_name
     df_all = df_all.append(df.rename(columns={df.columns[0]: "Value"}),sort=True)
 
-df_wide = df_all.pivot(columns='MEV_Type', values='Value')
-df_wide.index = pd.to_datetime(df_wide.index, errors='coerce')
-mort_ser = df_wide.MORTGAGE30US.resample('1D').interpolate(method='linear')
+df_wide = df_all.pivot(columns='MEV_Type', values='Value')#reshaping from long to wide format
+#df_wide.index = pd.to_datetime(df_wide.index, errors='coerce')
+mort_ser = df_wide.MORTGAGE30US.resample('1D').interpolate(method='linear') #linearly interpolate mortgage rates
+#after resampling available data to daily frequency. This does the job of a weighted interpolation for NaNs
 
 gdp_ser = df_wide['GDP']
-df_wide = df_wide.loc[gdp_ser[~gdp_ser.isna()].index, :]
-mort_ser = mort_ser.loc[gdp_ser[~gdp_ser.isna()].index]
-df_wide['MORTGAGE30US'] = mort_ser
+df_wide = df_wide.loc[gdp_ser[~gdp_ser.isna()].index, :]#retain df_wide only where GDP is non NaN
+mort_ser = mort_ser.loc[gdp_ser[~gdp_ser.isna()].index]#do the same for the interpolated mortgage rates
+df_wide['MORTGAGE30US'] = mort_ser#push the rates into the dataframe
 
-df_wide['MORTGAGE30US_Diff'] = df_wide['MORTGAGE30US'].diff()
+df_wide['MORTGAGE30US_Diff'] = df_wide['MORTGAGE30US'].diff()#take first difference of mortgage rates
 
 
-var_model_list = list_vars
+var_model_list = list_vars #new list containing only stationary variable....not sure if this needed.list_vars wd suffice
 #var_model_list.append('UE')
-varModelDF = df_wide[var_model_list]
-varModelDF.dropna(inplace=True)
+varModelDF = df_wide[var_model_list]#limit dataframe to only those stationary variables that will be use VAR model
+varModelDF.dropna(inplace=True)#and drop na that came about due to diff
 
+#This function plots the PAC, ACF
 def tsplot(y, x, lags=None, figsize=(10, 8)):
     fig = plt.figure(figsize=figsize)
     layout = (2, 2)
@@ -140,25 +143,27 @@ def tsplot(y, x, lags=None, figsize=(10, 8)):
     plt.tight_layout()
     return ts_ax, acf_ax, pacf_ax
 
+#ACF,PACF plotting function is called in a loop run on all model variables 
 for var in list_vars:
     tsplot(varModelDF[var],var)
-
+#Result: UE - 4 lags, Mortgage - 6!, GDP -2, HPI -3.
 
 #tes-train split etc.
-startDate_train = datetime.strptime('1981-07-01', '%Y-%m-%d')
-endDate_train = datetime.strptime('2012-07-01', '%Y-%m-%d')
+startDate_train = datetime.strptime('1981-07-01', '%Y-%m-%d') #data start date parsed to required format
+endDate_train = datetime.strptime('2012-07-01', '%Y-%m-%d')#train end date parsed to required format
 
-dates_list = varModelDF.index
+dates_list = varModelDF.index #contains all dates
 
 train_dates = [date for date in dates_list if (date >= startDate_train) & (date <= endDate_train)]
-test_dates = list(set(dates_list) - set(train_dates))
+#all dates btwn start and end train are selected
+test_dates = list(set(dates_list) - set(train_dates)) #dates selected from train are removed from total & alloc to test
 
 
-train_varModelDF = varModelDF.loc[train_dates]
-test_varModelDF = varModelDF.loc[test_dates]
+train_varModelDF = varModelDF.loc[train_dates]#form train dataframe using only train dates
+test_varModelDF = varModelDF.loc[test_dates]#form test dataframe using only test dates
 
 #Run Model on test-train
-var_model_list = list_vars
+var_model_list = list_vars #repeated
 #var_model_list.append('UE')
 varModelDF = df_wide[var_model_list]
 varModelDF.dropna(inplace=True)
@@ -170,7 +175,7 @@ results.plot_acorr()
 
 plt.show()
 
-results.summary()
+results.summary() #for all variables, BIC ended up selecting L1 models
 
 # save the model to disk
 #filename = '/Users/vibhor/Desktop/Models/lag4model.sav'
@@ -184,12 +189,12 @@ results.summary()
 #test performance
 startDt = test_dates[0]
 endDt = test_dates[-1]
-results.predict(train_varModelDF,startDate,endDt)
+results.forecast(train_varModelDF,startDate,endDt)
 
 lag_order = results.k_ar
 results.forecast(test_varModelDF.values[-lag_order:], 5)
 
-
+fcst = results.forecast(train_varModelDF.values[-lag_order:], 5)
 
 ################
 dict_varmodels = dict()
@@ -199,7 +204,7 @@ last_forecast_date = datetime.strptime('2018-01-01', '%Y-%m-%d')
 model_build_date = datetime.strptime('2012-07-01', '%Y-%m-%d')
 
 while (model_build_date <= last_forecast_date):
-    train_dates = [date for date in dates_list if (date < model_build_date)]
+    train_dates = [date for date in dates_list if (date <= model_build_date)]
     train_data = varModelDF.loc[train_dates]
     # Run Model on test-train
     varModelDF = df_wide[var_model_list]
@@ -209,8 +214,7 @@ while (model_build_date <= last_forecast_date):
     results = model.fit(ic='bic', maxlags=4)
 
     for fcst_period in range(1,4):
-
-    forecast = results.predict(train_varModelDF, startDate, endDt)
+        forecast = results.predict(train_varModelDF, startDate, endDt)
 
     dict_varmodels[model_build_date] = {'model':model,'results':results, 'adf_stats':adf_stats}
     model_build_date = model_build_date + relativedelta(months=3)
