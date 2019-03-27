@@ -189,7 +189,6 @@ results.summary() #for all variables, BIC ended up selecting L1 models
 #test performance
 startDt = test_dates[0]
 endDt = test_dates[-1]
-results.forecast(train_varModelDF,startDate,endDt)
 
 lag_order = results.k_ar
 results.forecast(test_varModelDF.values[-lag_order:], 5)
@@ -203,9 +202,18 @@ var_model_list = list_vars
 last_forecast_date = datetime.strptime('2018-01-01', '%Y-%m-%d')
 model_build_date = datetime.strptime('2012-07-01', '%Y-%m-%d')
 
-while (model_build_date <= last_forecast_date):
+while (model_build_date < last_forecast_date):
     train_dates = [date for date in dates_list if (date <= model_build_date)]
     train_data = varModelDF.loc[train_dates]
+    actual_dates = set(dates_list) - set(train_dates)
+    actual_data = varModelDF.loc[actual_dates]
+    actual_data.reset_index(inplace=True)
+    fcstErrPeriod = ['1Yr','2Yr','3Yr','4Yr','5Yr','6Yr','7Yr','8Yr']
+    fcstErr = pd.DataFrame(0,  index=range(len(fcstErrPeriod)),columns = range(len(list_vars)))
+    fcstErr.columns = list_vars
+
+    forecast_period = len(dates_list) - len(train_dates)
+
     # Run Model on test-train
     varModelDF = df_wide[var_model_list]
     varModelDF.dropna(inplace=True)
@@ -213,8 +221,29 @@ while (model_build_date <= last_forecast_date):
     model = VAR(train_varModelDF)
     results = model.fit(ic='bic', maxlags=4)
 
-    for fcst_period in range(1,4):
-        forecast = results.predict(train_varModelDF, startDate, endDt)
+    forecast = results.forecast(train_varModelDF.values[-lag_order:], forecast_period)
 
-    dict_varmodels[model_build_date] = {'model':model,'results':results, 'adf_stats':adf_stats}
+    fcstDF = pd.DataFrame(forecast)
+    fcstDF.columns = list_vars
+    fcstErrMod = np.mod(len(actual_data),4)
+    fcstErrQtrs = len(actual_data) - fcstErrMod
+    if(fcstErrQtrs ==4):
+        fcstYrRange = range(4,fcstErrQtrs+4,4)
+    else:
+        fcstYrRange = range(0,fcstErrQtrs,4)
+
+    zeroList = [0] * (fcstErr.shape[0] - int(fcstErrQtrs / 4))
+
+    for var in list_vars:
+        err = []
+        for Year in fcstYrRange:
+            err.append(mae(fcstDF[var][0:Year],actual_data[var][0:Year]))
+        err.extend(zeroList)
+        fcstErr[var] = err
+
+    dict_varmodels[model_build_date] = {'model':model,'results':results, 'fcst':forecast,'fcstErr':fcstErr}
     model_build_date = model_build_date + relativedelta(months=3)
+
+def mae(ypred, ytrue):
+    """ returns the mean absolute percentage error """
+    return np.mean(np.abs(ypred-ytrue))
