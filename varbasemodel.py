@@ -15,6 +15,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import statsmodels.api as smodels
 from sklearn.externals import joblib
+import functools
 
 
 #Initiate Fred Object
@@ -190,24 +191,37 @@ results.summary() #for all variables, BIC ended up selecting L1 models
 startDt = test_dates[0]
 endDt = test_dates[-1]
 
-lag_order = results.k_ar
+#lag_order = results.k_ar
+lag_order = 1
 results.forecast(test_varModelDF.values[-lag_order:], 5)
 
 fcst = results.forecast(train_varModelDF.values[-lag_order:], 5)
 
 ################
-dict_varmodels = dict()
+#The idea here is to slide the train end date, build the model and check how the errors behave.
+#Errors are compared across models for different lengths of forecasting timeframe
+
+dict_varmodels = dict() #This dictionary will contain all info on models built on sliding train end date
 var_model_list = list_vars
 
-last_forecast_date = datetime.strptime('2018-01-01', '%Y-%m-%d')
-model_build_date = datetime.strptime('2012-07-01', '%Y-%m-%d')
+last_forecast_date = datetime.strptime('2018-01-01', '%Y-%m-%d')#No model is built beyond this time. Ensures min 4Q fcst
+model_build_date = datetime.strptime('2012-07-01', '%Y-%m-%d')#This is the stopping time for train data.
+modelID = 'A'
 
+#Define MAE
+def mae(ypred, ytrue):
+    """ returns the mean absolute percentage error """
+    return np.mean(np.abs(ypred-ytrue))
+
+#This while loop slides the train data
 while (model_build_date < last_forecast_date):
     train_dates = [date for date in dates_list if (date <= model_build_date)]
     train_data = varModelDF.loc[train_dates]
-    actual_dates = set(dates_list) - set(train_dates)
-    actual_data = varModelDF.loc[actual_dates]
-    actual_data.reset_index(inplace=True)
+    actual_TestDates = list(set(dates_list) - set(train_dates))
+    actual_TestDates.sort()
+    actual_TestData = varModelDF.loc[actual_TestDates]#the ordering of data is getting screwed
+    actual_TestData.reset_index(inplace=True)
+
     fcstErrPeriod = ['1Yr','2Yr','3Yr','4Yr','5Yr','6Yr','7Yr','8Yr']
     fcstErr = pd.DataFrame(0,  index=range(len(fcstErrPeriod)),columns = range(len(list_vars)))
     fcstErr.columns = list_vars
@@ -215,35 +229,116 @@ while (model_build_date < last_forecast_date):
     forecast_period = len(dates_list) - len(train_dates)
 
     # Run Model on test-train
-    varModelDF = df_wide[var_model_list]
-    varModelDF.dropna(inplace=True)
+    train_varModelDF = train_data[var_model_list]
+    train_varModelDF.dropna(inplace=True)
 
     model = VAR(train_varModelDF)
     results = model.fit(ic='bic', maxlags=4)
+    lag_order = results.k_ar
 
     forecast = results.forecast(train_varModelDF.values[-lag_order:], forecast_period)
 
     fcstDF = pd.DataFrame(forecast)
     fcstDF.columns = list_vars
-    fcstErrMod = np.mod(len(actual_data),4)
-    fcstErrQtrs = len(actual_data) - fcstErrMod
+    fcstErrMod = np.mod(len(actual_TestData), 4)
+    fcstErrQtrs = len(actual_TestData) - fcstErrMod
     if(fcstErrQtrs ==4):
-        fcstYrRange = range(4,fcstErrQtrs+4,4)
+        fcstQtrRange = range(4,fcstErrQtrs+4,4)
     else:
-        fcstYrRange = range(0,fcstErrQtrs,4)
+        fcstQtrRange = range(4,fcstErrQtrs+4,4)
 
     zeroList = [0] * (fcstErr.shape[0] - int(fcstErrQtrs / 4))
 
     for var in list_vars:
         err = []
-        for Year in fcstYrRange:
-            err.append(mae(fcstDF[var][0:Year],actual_data[var][0:Year]))
+        for Qtrs in fcstQtrRange:
+            err.append(mae(fcstDF[var][0:Qtrs], actual_TestData[var][0:Qtrs]))
         err.extend(zeroList)
         fcstErr[var] = err
 
-    dict_varmodels[model_build_date] = {'model':model,'results':results, 'fcst':forecast,'fcstErr':fcstErr}
+    modelID = chr(ord(modelID) + 1)
+    dict_varmodels[modelID] = {'buildDate':model_build_date,'model':model,'results':results, 'fcst':forecast,'fcstErr':fcstErr}
     model_build_date = model_build_date + relativedelta(months=3)
 
-def mae(ypred, ytrue):
-    """ returns the mean absolute percentage error """
-    return np.mean(np.abs(ypred-ytrue))
+
+firstPeriodError = pd.DataFrame()
+secondPeriodError = pd.DataFrame()
+thirdPeriodError = pd.DataFrame()
+fourthPeriodError = pd.DataFrame()
+fifthPeriodError = pd.DataFrame()
+sixthPeriodError = pd.DataFrame()
+
+#Extract the errors
+for modelName,modelAttribs in dict_varmodels.items():
+    fcstErr = modelAttribs['fcstErr'].copy()
+
+    fcstVal = fcstErr.iloc[0]
+    fcstVal.name = modelName
+    firstPeriodError = firstPeriodError.append(fcstVal)
+
+    fcstVal = fcstErr.iloc[1]
+    fcstVal.name = modelName
+    secondPeriodError = secondPeriodError.append(fcstVal)
+
+    fcstVal = fcstErr.iloc[2]
+    fcstVal.name = modelName
+    thirdPeriodError = thirdPeriodError.append(fcstVal)
+
+    fcstVal = fcstErr.iloc[3]
+    fcstVal.name = modelName
+    fourthPeriodError = fourthPeriodError.append(fcstVal)
+
+    fcstVal = fcstErr.iloc[4]
+    fcstVal.name = modelName
+    fifthPeriodError = fifthPeriodError.append(fcstVal)
+
+    fcstVal = fcstErr.iloc[5]
+    fcstVal.name = modelName
+    sixthPeriodError = sixthPeriodError.append(fcstVal)
+
+
+
+
+errorDFs = [firstPeriodError,secondPeriodError,thirdPeriodError,fourthPeriodError,fifthPeriodError,sixthPeriodError]
+for num, errorDF in enumerate(errorDFs, start=1):
+    # print(errorDF.columns)
+    errorDF.columns = [f'{col}_period{num}' for col in list_vars]
+
+merge = functools.partial(pd.merge, left_index=True, right_index=True)
+errorDFs = functools.reduce(merge, errorDFs)
+print(errorDFs.head())
+
+
+
+
+g = sns.FacetGrid(errorDFs, col="origin")
+g.map(sns.distplot, "mpg")
+
+
+sns.set(style="ticks")
+
+# Create a dataset with many short random walks
+rs = np.random.RandomState(4)
+pos = rs.randint(-1, 2, (20, 5)).cumsum(axis=1)
+pos -= pos[:, 0, np.newaxis]
+step = np.tile(range(5), 20)
+walk = np.repeat(range(20), 5)
+df = pd.DataFrame(np.c_[pos.flat, step, walk],
+                  columns=["position", "step", "walk"])
+
+# Initialize a grid of plots with an Axes for each walk
+grid = sns.FacetGrid(df, col="walk", hue="walk", palette="tab20c",
+                     col_wrap=4, height=1.5)
+
+# Draw a horizontal line to show the starting point
+grid.map(plt.axhline, y=0, ls=":", c=".5")
+
+# Draw a line plot to show the trajectory of each random walk
+grid.map(plt.plot, "step", "position", marker="o")
+
+# Adjust the tick positions and labels
+grid.set(xticks=np.arange(5), yticks=[-3, 3],
+         xlim=(-.5, 4.5), ylim=(-3.5, 3.5))
+
+# Adjust the arrangement of the plots
+grid.fig.tight_layout(w_pad=1)
