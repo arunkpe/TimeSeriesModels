@@ -32,6 +32,7 @@ class getFredData:
             standardizedString = inputString
         return standardizedString
 
+
     def available_codes(self):
         codeLookup = pd.read_excel(os.path.join(self.BASE_DIR, 'FREDCode.xlsx'))
         return codeLookup
