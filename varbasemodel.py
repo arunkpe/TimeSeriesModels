@@ -207,11 +207,14 @@ var_model_list = list_vars
 last_forecast_date = datetime.strptime('2018-01-01', '%Y-%m-%d')#No model is built beyond this time. Ensures min 4Q fcst
 model_build_date = datetime.strptime('2012-07-01', '%Y-%m-%d')#This is the stopping time for train data.
 modelID = 'A'
+<<<<<<< HEAD
 
 #Define MAE
 def mae(ypred, ytrue):
     """ returns the mean absolute percentage error """
     return np.mean(np.abs(ypred-ytrue))
+=======
+>>>>>>> 0447bdae003ec69b0f73230370b1b7fbbcd281d6
 
 #This while loop slides the train data
 while (model_build_date < last_forecast_date):
@@ -260,6 +263,7 @@ while (model_build_date < last_forecast_date):
     dict_varmodels[modelID] = {'buildDate':model_build_date,'model':model,'results':results, 'fcst':forecast,'fcstErr':fcstErr}
     model_build_date = model_build_date + relativedelta(months=3)
 
+<<<<<<< HEAD
 
 firstPeriodError = pd.DataFrame()
 secondPeriodError = pd.DataFrame()
@@ -342,3 +346,25 @@ grid.set(xticks=np.arange(5), yticks=[-3, 3],
 
 # Adjust the arrangement of the plots
 grid.fig.tight_layout(w_pad=1)
+=======
+def mae(ypred, ytrue):
+    """ returns the mean absolute percentage error """
+    return np.mean(np.abs(ypred-ytrue))
+
+
+firstPeriodError = []
+#Extract the errors
+for modelName,modelAttribs in dict_varmodels.items():
+    fcstErr = modelAttribs['fcstErr'].copy()
+    firstPeriodError.append(fcstErr.iloc[[1]])
+
+
+df_all = pd.DataFrame(columns=['MEV_Type', 'Value'], index=['Date'])#dataframe of MEVs is now constructed
+df_all.dropna(inplace=True)
+
+#This for loop populates the dataframe from the dictionary dict_macrovars
+for mev_name, mev_dict in dict_macrovars.items():
+    df = mev_dict['df'].copy()
+    df['MEV_Type'] = mev_name
+    df_all = df_all.append(df.rename(columns={df.columns[0]: "Value"}),sort=True)
+>>>>>>> 0447bdae003ec69b0f73230370b1b7fbbcd281d6
