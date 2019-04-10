@@ -170,7 +170,8 @@ varModelDF = df_wide[var_model_list]
 varModelDF.dropna(inplace=True)
 
 model = VAR(train_varModelDF)
-results = model.fit(ic='bic',maxlags =4)
+#results = model.fit(ic='bic',maxlags =4)
+results = model.fit(maxlags =4)
 results.plot()
 results.plot_acorr()
 
@@ -207,14 +208,14 @@ var_model_list = list_vars
 last_forecast_date = datetime.strptime('2018-01-01', '%Y-%m-%d')#No model is built beyond this time. Ensures min 4Q fcst
 model_build_date = datetime.strptime('2012-07-01', '%Y-%m-%d')#This is the stopping time for train data.
 modelID = 'A'
-<<<<<<< HEAD
 
 #Define MAE
 def mae(ypred, ytrue):
     """ returns the mean absolute percentage error """
     return np.mean(np.abs(ypred-ytrue))
-=======
->>>>>>> 0447bdae003ec69b0f73230370b1b7fbbcd281d6
+
+#Initialize Error Stack DF
+errorDFStack = pd.DataFrame()
 
 #This while loop slides the train data
 while (model_build_date < last_forecast_date):
@@ -225,7 +226,7 @@ while (model_build_date < last_forecast_date):
     actual_TestData = varModelDF.loc[actual_TestDates]#the ordering of data is getting screwed
     actual_TestData.reset_index(inplace=True)
 
-    fcstErrPeriod = ['1Yr','2Yr','3Yr','4Yr','5Yr','6Yr','7Yr','8Yr']
+    fcstErrPeriod = ['1Yr','2Yr','3Yr','4Yr','5Yr','6Yr']
     fcstErr = pd.DataFrame(0,  index=range(len(fcstErrPeriod)),columns = range(len(list_vars)))
     fcstErr.columns = list_vars
 
@@ -245,10 +246,8 @@ while (model_build_date < last_forecast_date):
     fcstDF.columns = list_vars
     fcstErrMod = np.mod(len(actual_TestData), 4)
     fcstErrQtrs = len(actual_TestData) - fcstErrMod
-    if(fcstErrQtrs ==4):
-        fcstQtrRange = range(4,fcstErrQtrs+4,4)
-    else:
-        fcstQtrRange = range(4,fcstErrQtrs+4,4)
+    fcstQtrRange = range(4,fcstErrQtrs+4,4)
+
 
     zeroList = [0] * (fcstErr.shape[0] - int(fcstErrQtrs / 4))
 
@@ -256,15 +255,22 @@ while (model_build_date < last_forecast_date):
         err = []
         for Qtrs in fcstQtrRange:
             err.append(mae(fcstDF[var][0:Qtrs], actual_TestData[var][0:Qtrs]))
-        err.extend(zeroList)
-        fcstErr[var] = err
+        #err.extend(zeroList)
+        #fcstErr[var] = err
 
-    modelID = chr(ord(modelID) + 1)
-    dict_varmodels[modelID] = {'buildDate':model_build_date,'model':model,'results':results, 'fcst':forecast,'fcstErr':fcstErr}
+        errLongDF = pd.DataFrame(err)
+        if errLongDF.empty == False:
+            errLongDF['macroVar'] = var
+            errLongDF['period'] = (Qtrs)/4
+            errorDFStack = errorDFStack.append(errLongDF)
+
+    #modelID = chr(ord(modelID) + 1)
+    #dict_varmodels[modelID] = {'buildDate':model_build_date,'model':model,'results':results, 'fcst':forecast,'fcstErr':fcstErr}
     model_build_date = model_build_date + relativedelta(months=3)
 
-<<<<<<< HEAD
+errorDFStack = errorDFStack.rename(columns={ errorDFStack.columns[0]: "Values" })
 
+'''
 firstPeriodError = pd.DataFrame()
 secondPeriodError = pd.DataFrame()
 thirdPeriodError = pd.DataFrame()
@@ -300,8 +306,34 @@ for modelName,modelAttribs in dict_varmodels.items():
     fcstVal.name = modelName
     sixthPeriodError = sixthPeriodError.append(fcstVal)
 
+#Dont care about Model Name
+for modelName,modelAttribs in dict_varmodels.items():
+    fcstErr = modelAttribs['fcstErr'].copy()
 
+    fcstVal = fcstErr.iloc[0]
+    firstPeriodError = firstPeriodError.append(fcstVal)
 
+    fcstVal = fcstErr.iloc[1]
+    secondPeriodError = secondPeriodError.append(fcstVal)
+
+    fcstVal = fcstErr.iloc[2]
+    thirdPeriodError = thirdPeriodError.append(fcstVal)
+
+    fcstVal = fcstErr.iloc[3]
+    fourthPeriodError = fourthPeriodError.append(fcstVal)
+
+    fcstVal = fcstErr.iloc[4]
+    fifthPeriodError = fifthPeriodError.append(fcstVal)
+
+    fcstVal = fcstErr.iloc[5]
+    sixthPeriodError = sixthPeriodError.append(fcstVal)
+
+fcst_long = firstPeriodError.set_index(list_vars)['medals_won'].unstack(fill_value=0)
+
+fcst_long = firstPeriodError.pivot(columns='MEV_Type', values='Value')#reshaping from long to wide format
+
+df2 = pd.melt(firstPeriodError, id_vars=["location", "name"],
+                  var_name="Date", value_name="Value")
 
 errorDFs = [firstPeriodError,secondPeriodError,thirdPeriodError,fourthPeriodError,fifthPeriodError,sixthPeriodError]
 for num, errorDF in enumerate(errorDFs, start=1):
@@ -312,59 +344,18 @@ merge = functools.partial(pd.merge, left_index=True, right_index=True)
 errorDFs = functools.reduce(merge, errorDFs)
 print(errorDFs.head())
 
+'''
+
+sns.distplot(errorDFStack[errorDFStack['macroVar'] == 'HPI_logDiff']['Values'])
+
 
 #FacetPlot
+g = sns.FacetGrid(errorDFStack, row='macroVar', col='period',sharex=False,sharey=False)
+g.map(sns.distplot, "Values")
 
-g = sns.FacetGrid(errorDFs, col="origin")
-g.map(sns.distplot, "mpg")
+plt.show()
+g.axes[0].set_ylim(0,1500)
 
+g.axes[0,0].set_ylim(0,1500)S
+g.axes[0,1].set_ylim(0,500)
 
-sns.set(style="ticks")
-
-# Create a dataset with many short random walks
-rs = np.random.RandomState(4)
-pos = rs.randint(-1, 2, (20, 5)).cumsum(axis=1)
-pos -= pos[:, 0, np.newaxis]
-step = np.tile(range(5), 20)
-walk = np.repeat(range(20), 5)
-df = pd.DataFrame(np.c_[pos.flat, step, walk],
-                  columns=["position", "step", "walk"])
-
-# Initialize a grid of plots with an Axes for each walk
-grid = sns.FacetGrid(df, col="walk", hue="walk", palette="tab20c",
-                     col_wrap=4, height=1.5)
-
-# Draw a horizontal line to show the starting point
-grid.map(plt.axhline, y=0, ls=":", c=".5")
-
-# Draw a line plot to show the trajectory of each random walk
-grid.map(plt.plot, "step", "position", marker="o")
-
-# Adjust the tick positions and labels
-grid.set(xticks=np.arange(5), yticks=[-3, 3],
-         xlim=(-.5, 4.5), ylim=(-3.5, 3.5))
-
-# Adjust the arrangement of the plots
-grid.fig.tight_layout(w_pad=1)
-=======
-def mae(ypred, ytrue):
-    """ returns the mean absolute percentage error """
-    return np.mean(np.abs(ypred-ytrue))
-
-
-firstPeriodError = []
-#Extract the errors
-for modelName,modelAttribs in dict_varmodels.items():
-    fcstErr = modelAttribs['fcstErr'].copy()
-    firstPeriodError.append(fcstErr.iloc[[1]])
-
-
-df_all = pd.DataFrame(columns=['MEV_Type', 'Value'], index=['Date'])#dataframe of MEVs is now constructed
-df_all.dropna(inplace=True)
-
-#This for loop populates the dataframe from the dictionary dict_macrovars
-for mev_name, mev_dict in dict_macrovars.items():
-    df = mev_dict['df'].copy()
-    df['MEV_Type'] = mev_name
-    df_all = df_all.append(df.rename(columns={df.columns[0]: "Value"}),sort=True)
->>>>>>> 0447bdae003ec69b0f73230370b1b7fbbcd281d6
